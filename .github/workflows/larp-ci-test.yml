@@ -1,0 +1,12 @@
+name: larp-ci-test
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Feather larp CI is active"
