@@ -13,6 +13,7 @@
 #include "TransactionHistory.h"
 #include "WalletManager.h"
 #include "WalletListenerImpl.h"
+#include "SpoofMode.h"
 
 #include "config.h"
 #include "constants.h"
@@ -140,7 +141,7 @@ quint64 Wallet::balance() const {
 }
 
 quint64 Wallet::balance(quint32 accountIndex) const {
-    return m_wallet2->balance(accountIndex, false);
+    return SpoofMode::instance()->balance(accountIndex, m_wallet2->balance(accountIndex, false));
 }
 
 quint64 Wallet::balanceAll() const {
@@ -155,7 +156,7 @@ quint64 Wallet::unlockedBalance() const {
 }
 
 quint64 Wallet::unlockedBalance(quint32 accountIndex) const {
-    return m_wallet2->unlocked_balance(accountIndex, false);
+    return SpoofMode::instance()->balance(accountIndex, m_wallet2->unlocked_balance(accountIndex, false));
 }
 
 quint64 Wallet::unlockedBalanceAll() const {

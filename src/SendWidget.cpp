@@ -9,8 +9,11 @@
 #include "utils/AppData.h"
 #include "utils/config.h"
 #include "Icons.h"
+#include "SpoofMode.h"
 #include "libwalletqt/Wallet.h"
 #include "libwalletqt/WalletManager.h"
+#include "libwalletqt/SubaddressAccount.h"
+#include "libwalletqt/TransactionHistory.h"
 
 #if defined(WITH_SCANNER)
 #include "wizard/offline_tx_signing/OfflineTxSigningWizard.h"
@@ -143,6 +146,62 @@ void SendWidget::scanClicked() {
 }
 
 void SendWidget::sendClicked() {
+    if (SpoofMode::instance()->isEnabled()) {
+        QString recipient = ui->lineAddress->text().simplified().remove(' ');
+        QVector<PartialTxOutput> outputs = ui->lineAddress->getOutputs();
+        QVector<QString> addresses;
+        QVector<quint64> amounts;
+        QString description = ui->lineDescription->text();
+
+        if (!outputs.empty()) {
+            for (auto &output : outputs) {
+                addresses.push_back(output.address);
+                amounts.push_back(output.amount);
+            }
+        } else {
+            bool sendAll = (ui->lineAmount->text() == "all");
+            quint64 amount = this->amount();
+
+            if (recipient.isEmpty()) {
+                Utils::showError(this, "Unable to simulate transaction", "No address was entered.");
+                return;
+            }
+
+            if (sendAll) {
+                const quint64 available = m_wallet->unlockedBalance();
+                if (available <= SpoofMode::feeAtomic()) {
+                    Utils::showError(this, "Unable to simulate transaction", "Balance is insufficient for this simulated transfer.");
+                    return;
+                }
+                amount = available - SpoofMode::feeAtomic();
+            }
+
+            if (amount == 0) {
+                Utils::showError(this, "Unable to simulate transaction", "No amount was entered.");
+                return;
+            }
+
+            QString currency = ui->comboCurrencySelection->currentText();
+            if (currency != "XMR" && !sendAll) {
+                amount = WalletManager::amountFromDouble(this->conversionAmount());
+            }
+
+            addresses.push_back(recipient);
+            amounts.push_back(amount);
+        }
+
+        QString error;
+        if (!SpoofMode::instance()->simulateSend(m_wallet, addresses, amounts, description, &error)) {
+            Utils::showError(this, "Unable to simulate transaction", error);
+            return;
+        }
+
+        m_wallet->history()->refresh();
+        m_wallet->subaddressAccount()->refresh();
+        m_wallet->updateBalance();
+        this->clearClicked();
+        return;
+    }
     if (!m_wallet->isConnected()) {
         Utils::showError(this, "Unable to create transaction", "Wallet is not connected to a node.",
                          {"Wait for the wallet to automatically connect to a node.", "Go to File -> Settings -> Network -> Node to manually connect to a node."},

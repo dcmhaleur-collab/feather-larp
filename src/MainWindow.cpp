@@ -8,6 +8,7 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QCheckBox>
+#include <QShortcut>
 
 #include "constants.h"
 #include "dialog/AddressCheckerIndexDialog.h"
@@ -36,6 +37,9 @@
 #include "utils/Icons.h"
 #include "utils/TorManager.h"
 #include "utils/WebsocketNotifier.h"
+#include "libwalletqt/SubaddressAccount.h"
+#include "SpoofModeDialog.h"
+#include "SpoofMode.h"
 
 #include "wallet/wallet_errors.h"
 
@@ -420,6 +424,17 @@ void MainWindow::initMenu() {
     ui->actionUpdate_balance->setShortcut(QKeySequence("Ctrl+U"));
     ui->actionShow_Searchbar->setShortcut(QKeySequence("Ctrl+F"));
     ui->actionDocumentation->setShortcut(QKeySequence("F1"));
+
+    auto *spoofShortcut = new QShortcut(QKeySequence("Ctrl+Shift+L"), this);
+    connect(spoofShortcut, &QShortcut::activated, this, [this] {
+        SpoofMode::instance()->attachWallet(m_wallet);
+        SpoofMode::instance()->registerAddresses();
+        SpoofModeDialog dialog(m_wallet, this);
+        dialog.exec();
+        m_wallet->history()->refresh();
+        m_wallet->subaddressAccount()->refresh();
+        m_wallet->updateBalance();
+    });
 }
 
 void MainWindow::initOffline() {
@@ -511,6 +526,21 @@ void MainWindow::initWalletContext() {
     connect(m_wallet, &Wallet::deviceError,         this, &MainWindow::onDeviceError);
     
     connect(m_wallet, &Wallet::multiBroadcast,      this, &MainWindow::onMultiBroadcast);
+
+    connect(SpoofMode::instance(), &SpoofMode::changed, this, [this] {
+        m_wallet->history()->refresh();
+        m_wallet->subaddressAccount()->refresh();
+        m_wallet->updateBalance();
+    });
+
+    // Link this wallet to the cross-wallet larp bridge so launching Feather and
+    // the Monero GUI together is enough for them to see each other's larp
+    // balances/sends/receives. Re-register whenever the active account changes
+    // so freshly created accounts/subaddresses are known to the peer.
+    SpoofMode::instance()->attachWallet(m_wallet);
+    connect(m_wallet, &Wallet::currentSubaddressAccountChanged, this, [this] {
+        SpoofMode::instance()->registerAddresses();
+    });
 }
 
 void MainWindow::menuToggleTabVisible(const QString &key){
@@ -603,11 +633,18 @@ void MainWindow::updateBalance() {
 }
 
 void MainWindow::onBalanceUpdated(quint64 balance, quint64 spendable) {
+    if (SpoofMode::instance()->isEnabled()) {
+        const quint32 account = m_wallet->currentSubaddressAccount();
+        balance = SpoofMode::instance()->balance(account, balance);
+        spendable = SpoofMode::instance()->balance(account, spendable);
+    }
+
     bool hide = conf()->get(Config::hideBalance).toBool();
     int displaySetting = conf()->get(Config::balanceDisplay).toInt();
     int decimals = conf()->get(Config::amountPrecision).toInt();
 
     QString balance_str = "Balance: ";
+    // no visible prefix – the spoof is transparent
     if (hide) {
         balance_str += "HIDDEN";
     }

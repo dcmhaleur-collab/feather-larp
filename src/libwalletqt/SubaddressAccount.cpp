@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: The Monero Project
 
 #include "SubaddressAccount.h"
+#include "SpoofMode.h"
 #include <wallet/wallet2.h>
 
 SubaddressAccount::SubaddressAccount(tools::wallet2 *wallet2, QObject *parent)
@@ -21,8 +22,8 @@ void SubaddressAccount::refresh()
         m_rows.emplace_back(
             QString::fromStdString(m_wallet2->get_subaddress_as_str({i,0})),
             QString::fromStdString(m_wallet2->get_subaddress_label({i,0})),
-            m_wallet2->balance(i, false),
-            m_wallet2->unlocked_balance(i, false));
+            SpoofMode::instance()->balance(i, m_wallet2->balance(i, false)),
+            SpoofMode::instance()->balance(i, m_wallet2->unlocked_balance(i, false)));
     }
 
     emit refreshFinished();

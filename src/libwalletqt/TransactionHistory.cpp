@@ -8,6 +8,7 @@
 #include "constants.h"
 #include "Wallet.h"
 #include "WalletManager.h"
+#include "SpoofMode.h"
 #include "rows/Output.h"
 #include "wallet/wallet2.h"
 
@@ -251,6 +252,11 @@ void TransactionHistory::refresh()
             m_rows.append(std::move(t));
 
             LOG_PRINT_L1(__FUNCTION__ << ": Unconfirmed payment found " << pd.m_amount);
+        }
+
+        const auto spoofRows = SpoofMode::instance()->transactions(m_wallet->currentSubaddressAccount());
+        for (const auto &row : spoofRows) {
+            m_rows.prepend(row);
         }
     }
 
